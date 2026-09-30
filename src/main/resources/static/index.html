@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Earth Informatics Explorer</title>
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='13' fill='%2338bdf8'/><path d='M3 16h26M16 3a20 20 0 010 26a20 20 0 010-26' stroke='%230b1220' fill='none' stroke-width='2'/></svg>">
+</head>
+<body>
+
+<div id="globe"></div>
+
+<!-- ------------------------------------------------------------------ boot -->
+<div id="boot" class="boot">
+  <div class="boot-inner">
+    <div class="boot-globe"></div>
+    <div class="boot-text">Loading Cesium<span class="dots"></span></div>
+    <div class="boot-detail" id="boot-detail">locating library</div>
+  </div>
+</div>
+
+<div id="boot-failed" class="boot-failed" hidden>
+  <h1 id="boot-failed-heading">Cesium could not be loaded</h1>
+  <p id="boot-failed-body">The dashboard needs the CesiumJS library.</p>
+  <pre id="boot-failed-command">./scripts/eie.sh fetch-cesium</pre>
+  <p class="muted" id="boot-failed-detail"></p>
+</div>
+
+<!-- ---------------------------------------------------------------- header -->
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-dot"></span>
+    <h1>Earth Informatics Explorer</h1>
+  </div>
+  <div class="topbar-right">
+    <div class="domain-strip" id="domain-strip"></div>
+    <div class="conn" id="conn" title="Telemetry connection">
+      <span class="conn-dot"></span><span class="conn-label">connecting</span>
+    </div>
+    <button class="icon-btn" id="panel-toggle" title="Toggle layers panel" aria-label="Toggle layers panel">&#9776;</button>
+  </div>
+</header>
+
+<!-- ----------------------------------------------------------------- panel -->
+<aside class="panel" id="panel">
+  <section class="panel-block">
+    <h2>Layers</h2>
+    <div id="layer-list" class="layer-list"></div>
+  </section>
+
+  <section class="panel-block">
+    <h2>Legend</h2>
+    <div id="legend" class="legend"><p class="muted">Select a layer to see its scale.</p></div>
+  </section>
+
+  <section class="panel-block">
+    <h2>Inspect</h2>
+    <div id="inspect" class="inspect">
+      <p class="muted">Click a feature on the globe for its properties.</p>
+    </div>
+  </section>
+
+  <section class="panel-block">
+    <h2>Data sources</h2>
+    <div id="providers" class="providers"></div>
+  </section>
+</aside>
+
+<!-- ---------------------------------------------------------------- alerts -->
+<div class="alerts" id="alerts"></div>
+
+<!-- ---------------------------------------------------------------- footer -->
+<footer class="statusbar">
+  <span id="status-text">Starting&hellip;</span>
+  <span class="spacer"></span>
+  <span id="cursor-readout" class="muted"></span>
+  <span id="camera-readout" class="muted"></span>
+</footer>
+
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>

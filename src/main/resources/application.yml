@@ -1,0 +1,284 @@
+# =============================================================================
+# Earth Informatics Explorer - runtime configuration
+#
+# Every value here can be overridden by an environment variable using Spring
+# Boot's relaxed binding, e.g.
+#
+#   EXPLORER_UPSTREAMS_FIRMS_MAP_KEY=abc123   ->  explorer.upstreams.firms.map-key
+#   EXPLORER_AIS_API_KEY=xyz                 ->  explorer.upstreams.ais.api-key
+#   EXPLORER_UPSTREAMS_OPENSKY_CLIENT_ID=...  ->  explorer.upstreams.open-sky.client-id
+#
+# The application boots with no configuration at all: the defaults below are the
+# ones ExplorerProperties already declares, written out explicitly so an operator
+# can see and change the whole surface in one place.
+# =============================================================================
+server:
+  port: 8080
+  shutdown: graceful
+  compression:
+    enabled: true
+    # GeoJSON payloads are highly repetitive JSON; gzip is worth the CPU and the
+    # responses are an order of magnitude smaller on the wire.
+    mime-types: application/json,application/geo+json,text/html,text/css,application/javascript
+    min-response-size: 2KB
+  error:
+    include-message: always
+    include-binding-errors: always
+  netty:
+    # Bounds per-connection buffer allocation for the WebSocket clients.
+    worker:
+      core-threads: 8
+      max-threads: 32
+
+spring:
+  application:
+    name: earth-informatics-explorer
+  main:
+    banner-mode: "off"
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  codec:
+    # Applies to the WebSocket handshake decoder as well as HTTP bodies. Keep in
+    # sync with explorer.websocket.max-inbound-message-size below: inbound control
+    # frames are a few dozen bytes, so 1 MiB is already generous and still caps
+    # the damage a hostile client can do with one frame.
+    max-inbound-message-size: 1MB
+  jackson:
+    default-property-inclusion: always
+    serialization:
+      write-dates-as-timestamps: false
+      fail-on-empty-beans: false
+    deserialization:
+      fail-on-unknown-properties: false
+  webflux:
+    problemdetails:
+      enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # health/info/prometheus only: the full actuator surface would leak
+        # environment values and shutdown controls.
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  health:
+    # The AIS feed is an external push source; failing liveness when the vendor
+    # is down would restart a perfectly healthy application.
+    ais:
+      enabled: false
+  metrics:
+    tags:
+      application: earth-informatics-explorer
+  info:
+    env:
+      enabled: true
+
+logging:
+  level:
+    root: INFO
+    com.earthinformatics.explorer: INFO
+    # Reactor's parallel scheduler and Netty are chatty at INFO; keep the
+    # application log readable.
+    reactor.netty.http.client: WARN
+    reactor.core.publisher.Operators: WARN
+    org.springframework.web.reactive.socket: INFO
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
+
+# =============================================================================
+# Application configuration
+# =============================================================================
+explorer:
+  api:
+    version: v1
+    cors-enabled: true
+    # Lock this down to the real dashboard origin in production, e.g.
+    #   allowed-origins: ["https://globe.example.org"]
+    allowed-origins: ["*"]
+    # Provenance rides in the GeoJSON `meta` foreign member; turning it off makes
+    # responses smaller but removes the UI's ability to explain its own data.
+    expose-provenance: true
+    enabled: true
+
+  cache:
+    # Tier 1 - heavy upstream documents. 5-15 minutes is the band the free
+    # public providers are sized for: short enough that "live" is honest, long
+    # enough that a browser refresh does not cost a provider a request.
+    default-ttl: 15m
+    default-refresh-after-write: 10m
+    default-max-size: 256
+    # Tier 2 - kinetic layers and roll-ups that must not look stale on the globe.
+    short-ttl: 30s
+    telemetry-ttl: 30s
+    # Upper bound on concurrently tracked in-flight de-duplications; protects
+    # against a key-space explosion from adversarial cache keys.
+    single-flight: 512
+
+  websocket:
+    tick-interval: 5s
+    # Ticks retained for a slow client before its frames start being dropped.
+    buffer-ticks: 10
+    max-inbound-message-size: 1048576
+    send-timeout: 2s
+
+  upstreams:
+    # ---- USGS Earthquake Hazards Program -------------------------------------
+    usgs:
+      base-url: https://earthquake.usgs.gov/earthquakes/feed/v1.0
+      feeds:
+        - all_hour
+        - all_day
+      default-feed: all_day
+
+    # ---- NASA EONET natural hazards -----------------------------------------
+    eonet:
+      base-url: https://eonet.gsfc.nasa.gov/api/v3
+      max-limit: 1000
+      # Default look-back for /tectonics/volcanoes. EONET's volcano feed is event-driven, so a
+      # 30-day window is empty most of the time; a year reliably lists reported volcanoes.
+      default-days: 365
+
+    # ---- NASA FIRMS active fires ---------------------------------------------
+    firms:
+      base-url: https://firms.modaps.eosdis.nasa.gov/api
+      # DEMO_KEY is throttled and restricted to small bounding boxes; a real viewport-sized
+      # query with it answers HTTP 401, which is an authorisation problem, not a transient
+      # failure, so it is not worth retrying. Register a free key at
+      # https://firms.modaps.eosdis.nasa.gov/mapkey/ and set either NASA_FIRMS_KEY or
+      # EXPLORER_UPSTREAMS_FIRMS_MAP_KEY. Both names are accepted; NASA_FIRMS_KEY wins because
+      # it is the name NASA documents, and the prefixed one is kept so existing deployments
+      # and the README keep working.
+      map-key: ${NASA_FIRMS_KEY:${EXPLORER_FIRMS_MAP_KEY:DEMO_KEY}}
+      enabled: true
+      min-longitude: 180
+      min-latitude: -90
+      max-longitude: 180
+      max-latitude: 90
+      days: 1
+      # The CSV endpoint is the same key's more generous budget; enable it if the
+      # GeoJSON endpoint starts throttling.
+      csv-fallback-enabled: false
+
+    # ---- Open-Meteo (forecast, air quality, marine) --------------------------
+    open-meteo:
+      forecast-url: https://api.open-meteo.com/v1
+      air-quality-url: https://air-quality-api.open-meteo.com/v1
+      marine-url: https://marine-api.open-meteo.com/v1
+      grid-step-degrees: 15
+      min-grid-step-degrees: 5
+      max-grid-step-degrees: 90
+      # Open-Meteo serves up to 100 coordinates per multi-location request on the
+      # free tier. A smaller value is not safer, only more expensive: at 30 a
+      # single air-quality lattice cost 87 calls, and with a 15m cache TTL four
+      # refreshes an hour exhausted the hourly quota by themselves - which
+      # surfaced to the user as "lattice chunks were rejected", not as a
+      # rate-limit warning.
+      max-cells-per-chunk: 100
+      enabled: true
+
+    # ---- OpenSky Network (live aircraft) -------------------------------------
+    open-sky:
+      base-url: https://opensky-network.org/api
+      token-url: https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token
+      # Anonymous access works but is throttled to a few hundred requests a day.
+      # Create an OAuth2 client at https://console.opensky-network.org/ for a
+      # much larger allowance, then set these two variables.
+      client-id: ${EXPLORER_OPENSKY_CLIENT_ID:}
+      client-secret: ${EXPLORER_OPENSKY_CLIENT_SECRET:}
+      audience: "90.0"
+      enabled: true
+      max-states: 4000
+
+    # ---- AISStream.io (live vessels, pushed) ---------------------------------
+    ais:
+      # AISStream v3 requires a subscription key on the WebSocket *upgrade* request
+      # (Ocp-Apim-Subscription-Key); without one the endpoint answers 404/401.
+      url: wss://stream.aisstream.io/v3/stream/sat
+      api-key: ${EXPLORER_AIS_API_KEY:}
+      enabled: true
+      # Bound on the in-memory vessel map. Above this the least-recently-seen
+      # vessels are dropped, which keeps a long-running process from growing
+      # without limit as more MMSI come into view.
+      max-tracked-vessels: 5000
+      vessel-ttl: 15m
+      reconnect-delay: 10s
+      reconnect-max-delay: 5m
+
+    # ---- NOAA CO-OPS (tides, water temperature) ------------------------------
+    noaa:
+      base-url: https://api.tidesandcurrents.noaa.gov/api/prod/datagetter
+      # NOAA asks every consumer to identify itself; change this to your org.
+      application: EARTH-INFORMATICS-EXPLORER
+      enabled: true
+      max-concurrent-requests: 3
+      # Leave `stations` unset to use the built-in global network. Override to
+      # track your own region, e.g.
+      #   stations:
+      #     - id: "9414290"
+      #       name: "San Francisco"
+      #       country: "US"
+      #       latitude: 37.806
+      #       longitude: -122.4669
+      stations: []
+
+    # ---- NDVI (vegetation vigour via WMS GetFeatureInfo) --------------------
+    ndvi:
+      # GIBS serves WMS 1.3.0 through wms.cgi; the bare /best path 404s. NB: every GIBS layer
+      # is published queryable="0", so GetFeatureInfo sampling returns nothing by design and the
+      # vegetation endpoint degrades with a WMS descriptor for the dashboard to render as imagery.
+      base-url: https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi
+      layer-name: MODIS_Terra_L3_NDVI_16Day
+      style: ""
+      srs: EPSG:4326
+      max-features: 30
+      grid-step-degrees: 15
+      enabled: true
+
+    # ---- Shared resilience policy --------------------------------------------
+    resilience:
+      # Per-host token bucket. 4/s sustained with a burst of 6 lets a cold cache
+      # fill quickly without ever looking like a flood to a free public API.
+      tokens-per-second: 4.0
+      burst: 6.0
+      connect-timeout: 8s
+      response-timeout: 20s
+      # Retries cover transport failures and 5xx/429 only; a 4xx will not fix
+      # itself and retrying it burns the caller's remaining time budget.
+      max-retries: 2
+      retry-backoff: 400ms
+      # 50 MiB ceiling on any single upstream body.
+      max-response-bytes: 52428800
+
+---
+# =============================================================================
+# Production profile
+#
+#   java -jar target/earth-informatics-explorer.jar --spring.profiles.active=prod
+#
+# Tightens the things that are safe to tighten once a real origin and a real
+# logging pipeline exist.
+# =============================================================================
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+explorer:
+  api:
+    cors-enabled: true
+    allowed-origins:
+      - https://globe.example.org
+
+logging:
+  level:
+    root: WARN
+    com.earthinformatics.explorer: INFO
+  logback:
+    rollingpolicy:
+      max-file-size: 50MB
+      max-history: 14

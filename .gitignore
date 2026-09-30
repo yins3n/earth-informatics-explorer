@@ -1,0 +1,39 @@
+# Build output
+target/
+!.mvn/wrapper/maven-wrapper.jar
+.mvn/wrapper/maven-wrapper.jar
+
+# Runtime state written by scripts/eie.sh
+.run/
+
+# Vendored CesiumJS (fetch with ./scripts/eie.sh fetch-cesium)
+src/main/resources/static/cesium/
+
+# The vendored Cesium build is large; keep it out of the tree. Everything else under
+# src/main/resources/static is hand-written and belongs in version control.
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+nbproject/private/
+nbproject/build/
+nbproject/dist/
+nbproject/nbactions.xml
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs and scratch
+*.log
+*.pid
+
+# Secrets: these are read from the environment, but guard against a stray local file
+.env
+.env.*
+!.env.example
