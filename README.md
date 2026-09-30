@@ -1,5 +1,5 @@
 # Earth Informatics Explorer
-
+**THIS PROGRAM IS BEST COMPATIBLE WITH LINUX DEVICES | PREFERRABLE ARCH LINUX**
 A Spring WebFlux service that serves five Earth-observation domains as strict GeoJSON, plus a
 CesiumJS dashboard that draws them on a globe and streams live domain telemetry over a WebSocket.
 
